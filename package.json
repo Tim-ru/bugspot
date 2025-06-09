@@ -23,7 +23,7 @@
     "bcryptjs": "^2.4.3",
     "jsonwebtoken": "^9.0.2",
     "helmet": "^7.1.0",
-    "rate-limiter-flexible": "^3.0.8",
+    "rate-limiter-flexible": "^2.4.1",
     "uuid": "^9.0.1",
     "concurrently": "^8.2.2"
   },
