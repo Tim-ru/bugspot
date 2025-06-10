@@ -1,5 +1,5 @@
 import express from 'express';
-import { getQuery } from '../database/init.js';
+import { supabase } from '../lib/supabase.js';
 
 const router = express.Router();
 
@@ -8,13 +8,17 @@ router.get('/config/:apiKey', async (req, res) => {
   try {
     const { apiKey } = req.params;
 
-    const project = await getQuery('SELECT * FROM projects WHERE api_key = ?', [apiKey]);
+    const { data: project, error } = await supabase
+      .from('projects')
+      .select('*')
+      .eq('api_key', apiKey)
+      .single();
     
-    if (!project) {
+    if (error || !project) {
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    const settings = project.settings ? JSON.parse(project.settings) : {};
+    const settings = project.settings || {};
 
     res.json({
       projectId: project.id,

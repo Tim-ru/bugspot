@@ -1,5 +1,5 @@
 import express from 'express';
-import { allQuery, getQuery } from '../database/init.js';
+import { supabase } from '../lib/supabase.js';
 import { authenticateToken } from './auth.js';
 
 const router = express.Router();
@@ -9,80 +9,81 @@ router.get('/dashboard', authenticateToken, async (req, res) => {
   try {
     const { projectId, days = 30 } = req.query;
 
+    // Base query for user's projects
     let projectFilter = '';
-    let params = [req.user.userId];
-
     if (projectId) {
-      projectFilter = 'AND p.id = ?';
-      params.push(projectId);
+      projectFilter = `AND project_id = '${projectId}'`;
     }
 
-    // Total reports
-    const totalReports = await getQuery(`
-      SELECT COUNT(*) as count 
-      FROM bug_reports br 
-      JOIN projects p ON br.project_id = p.id 
-      WHERE p.user_id = ? ${projectFilter}
-    `, params);
+    // Get total reports
+    const { count: totalReports, error: totalError } = await supabase
+      .from('bug_reports')
+      .select('*', { count: 'exact', head: true })
+      .in('project_id', 
+        supabase
+          .from('projects')
+          .select('id')
+          .eq('user_id', req.user.userId)
+      );
 
-    // Reports by status
-    const reportsByStatus = await allQuery(`
-      SELECT br.status, COUNT(*) as count 
-      FROM bug_reports br 
-      JOIN projects p ON br.project_id = p.id 
-      WHERE p.user_id = ? ${projectFilter}
-      GROUP BY br.status
-    `, params);
+    if (totalError) throw totalError;
 
-    // Reports by severity
-    const reportsBySeverity = await allQuery(`
-      SELECT br.severity, COUNT(*) as count 
-      FROM bug_reports br 
-      JOIN projects p ON br.project_id = p.id 
-      WHERE p.user_id = ? ${projectFilter}
-      GROUP BY br.severity
-    `, params);
+    // Get reports by status
+    const { data: statusData, error: statusError } = await supabase
+      .rpc('get_reports_by_status', { user_id: req.user.userId, project_id: projectId });
 
-    // Reports over time (last 30 days)
-    const reportsOverTime = await allQuery(`
-      SELECT 
-        DATE(br.created_at) as date,
-        COUNT(*) as count
-      FROM bug_reports br 
-      JOIN projects p ON br.project_id = p.id 
-      WHERE p.user_id = ? ${projectFilter}
-        AND br.created_at >= datetime('now', '-${days} days')
-      GROUP BY DATE(br.created_at)
-      ORDER BY date
-    `, params);
+    if (statusError) throw statusError;
 
-    // Recent reports
-    const recentReports = await allQuery(`
-      SELECT br.*, p.name as project_name
-      FROM bug_reports br 
-      JOIN projects p ON br.project_id = p.id 
-      WHERE p.user_id = ? ${projectFilter}
-      ORDER BY br.created_at DESC 
-      LIMIT 10
-    `, params);
+    // Get reports by severity
+    const { data: severityData, error: severityError } = await supabase
+      .rpc('get_reports_by_severity', { user_id: req.user.userId, project_id: projectId });
+
+    if (severityError) throw severityError;
+
+    // Get reports over time
+    const { data: timeData, error: timeError } = await supabase
+      .rpc('get_reports_over_time', { 
+        user_id: req.user.userId, 
+        project_id: projectId,
+        days_back: parseInt(days)
+      });
+
+    if (timeError) throw timeError;
+
+    // Get recent reports
+    let recentQuery = supabase
+      .from('bug_reports')
+      .select(`
+        *,
+        projects!inner(name, user_id)
+      `)
+      .eq('projects.user_id', req.user.userId);
+
+    if (projectId) {
+      recentQuery = recentQuery.eq('project_id', projectId);
+    }
+
+    const { data: recentReports, error: recentError } = await recentQuery
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (recentError) throw recentError;
 
     res.json({
-      totalReports: totalReports.count,
-      reportsByStatus: reportsByStatus.reduce((acc, item) => {
+      totalReports: totalReports || 0,
+      reportsByStatus: statusData?.reduce((acc, item) => {
         acc[item.status] = item.count;
         return acc;
-      }, {}),
-      reportsBySeverity: reportsBySeverity.reduce((acc, item) => {
+      }, {}) || {},
+      reportsBySeverity: severityData?.reduce((acc, item) => {
         acc[item.severity] = item.count;
         return acc;
-      }, {}),
-      reportsOverTime,
-      recentReports: recentReports.map(report => ({
+      }, {}) || {},
+      reportsOverTime: timeData || [],
+      recentReports: recentReports?.map(report => ({
         ...report,
-        environment: report.environment ? JSON.parse(report.environment) : null,
-        steps: report.steps ? JSON.parse(report.steps) : [],
-        tags: report.tags ? JSON.parse(report.tags) : []
-      }))
+        project_name: report.projects.name
+      })) || []
     });
   } catch (error) {
     console.error('Analytics error:', error);
@@ -93,10 +94,15 @@ router.get('/dashboard', authenticateToken, async (req, res) => {
 // Get projects
 router.get('/projects', authenticateToken, async (req, res) => {
   try {
-    const projects = await allQuery(
-      'SELECT * FROM projects WHERE user_id = ? ORDER BY created_at DESC',
-      [req.user.userId]
-    );
+    const { data: projects, error } = await supabase
+      .from('projects')
+      .select('*')
+      .eq('user_id', req.user.userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      throw error;
+    }
 
     res.json(projects);
   } catch (error) {
