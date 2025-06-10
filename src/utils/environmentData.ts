@@ -34,7 +34,7 @@ export function collectEnvironmentData(): {
     os = 'Linux';
   } else if (userAgent.includes('Android')) {
     os = 'Android';
-  } else if (userAgent.includes('iOS')) {
+  } else if (/iPhone|iPad|iPod/i.test(userAgent)) {
     os = 'iOS';
   }
 
