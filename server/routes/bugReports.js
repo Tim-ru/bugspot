@@ -1,5 +1,5 @@
 import express from 'express';
-import { runQuery, getQuery, allQuery } from '../database/init.js';
+import { supabase } from '../lib/supabase.js';
 import { authenticateToken } from './auth.js';
 
 const router = express.Router();
@@ -13,8 +13,13 @@ async function verifyApiKey(req, res, next) {
   }
 
   try {
-    const project = await getQuery('SELECT * FROM projects WHERE api_key = ?', [apiKey]);
-    if (!project) {
+    const { data: project, error } = await supabase
+      .from('projects')
+      .select('*')
+      .eq('api_key', apiKey)
+      .single();
+
+    if (error || !project) {
       return res.status(401).json({ error: 'Invalid API key' });
     }
 
@@ -46,34 +51,40 @@ router.post('/submit', verifyApiKey, async (req, res) => {
       return res.status(400).json({ error: 'Title and description are required' });
     }
 
-    const result = await runQuery(`
-      INSERT INTO bug_reports (
-        project_id, title, description, severity, screenshot,
-        environment, user_email, user_agent, url, steps, tags
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      req.project.id,
-      title,
-      description,
-      severity,
-      screenshot,
-      JSON.stringify(environment),
-      userEmail,
-      userAgent,
-      url,
-      JSON.stringify(steps || []),
-      JSON.stringify(tags || [])
-    ]);
+    const { data: report, error: reportError } = await supabase
+      .from('bug_reports')
+      .insert({
+        project_id: req.project.id,
+        title: title.trim(),
+        description: description.trim(),
+        severity,
+        screenshot,
+        environment,
+        user_email: userEmail?.trim() || null,
+        user_agent: userAgent,
+        url,
+        steps: steps || [],
+        tags: tags || []
+      })
+      .select()
+      .single();
+
+    if (reportError) {
+      throw reportError;
+    }
 
     // Track analytics
-    await runQuery(
-      'INSERT INTO analytics (project_id, event_type, event_data) VALUES (?, ?, ?)',
-      [req.project.id, 'bug_report_submitted', JSON.stringify({ severity, hasScreenshot: !!screenshot })]
-    );
+    await supabase
+      .from('analytics')
+      .insert({
+        project_id: req.project.id,
+        event_type: 'bug_report_submitted',
+        event_data: { severity, hasScreenshot: !!screenshot }
+      });
 
     res.status(201).json({
       message: 'Bug report submitted successfully',
-      id: result.id
+      id: report.id
     });
   } catch (error) {
     console.error('Bug report submission error:', error);
@@ -86,40 +97,38 @@ router.get('/', authenticateToken, async (req, res) => {
   try {
     const { projectId, status, severity, limit = 50, offset = 0 } = req.query;
 
-    let sql = `
-      SELECT br.*, p.name as project_name 
-      FROM bug_reports br 
-      JOIN projects p ON br.project_id = p.id 
-      WHERE p.user_id = ?
-    `;
-    const params = [req.user.userId];
+    let query = supabase
+      .from('bug_reports')
+      .select(`
+        *,
+        projects!inner(name, user_id)
+      `)
+      .eq('projects.user_id', req.user.userId);
 
     if (projectId) {
-      sql += ' AND br.project_id = ?';
-      params.push(projectId);
+      query = query.eq('project_id', projectId);
     }
 
     if (status) {
-      sql += ' AND br.status = ?';
-      params.push(status);
+      query = query.eq('status', status);
     }
 
     if (severity) {
-      sql += ' AND br.severity = ?';
-      params.push(severity);
+      query = query.eq('severity', severity);
     }
 
-    sql += ' ORDER BY br.created_at DESC LIMIT ? OFFSET ?';
-    params.push(parseInt(limit), parseInt(offset));
+    const { data: reports, error } = await query
+      .order('created_at', { ascending: false })
+      .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
 
-    const reports = await allQuery(sql, params);
+    if (error) {
+      throw error;
+    }
 
-    // Parse JSON fields
+    // Format the response
     const formattedReports = reports.map(report => ({
       ...report,
-      environment: report.environment ? JSON.parse(report.environment) : null,
-      steps: report.steps ? JSON.parse(report.steps) : [],
-      tags: report.tags ? JSON.parse(report.tags) : []
+      project_name: report.projects.name
     }));
 
     res.json(formattedReports);
@@ -140,20 +149,31 @@ router.put('/:id/status', authenticateToken, async (req, res) => {
     }
 
     // Verify ownership
-    const report = await getQuery(`
-      SELECT br.* FROM bug_reports br 
-      JOIN projects p ON br.project_id = p.id 
-      WHERE br.id = ? AND p.user_id = ?
-    `, [id, req.user.userId]);
+    const { data: report, error: fetchError } = await supabase
+      .from('bug_reports')
+      .select(`
+        *,
+        projects!inner(user_id)
+      `)
+      .eq('id', id)
+      .eq('projects.user_id', req.user.userId)
+      .single();
 
-    if (!report) {
+    if (fetchError || !report) {
       return res.status(404).json({ error: 'Bug report not found' });
     }
 
-    await runQuery(
-      'UPDATE bug_reports SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      [status, id]
-    );
+    const { error: updateError } = await supabase
+      .from('bug_reports')
+      .update({ 
+        status,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id);
+
+    if (updateError) {
+      throw updateError;
+    }
 
     res.json({ message: 'Status updated successfully' });
   } catch (error) {
@@ -168,17 +188,28 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
 
     // Verify ownership
-    const report = await getQuery(`
-      SELECT br.* FROM bug_reports br 
-      JOIN projects p ON br.project_id = p.id 
-      WHERE br.id = ? AND p.user_id = ?
-    `, [id, req.user.userId]);
+    const { data: report, error: fetchError } = await supabase
+      .from('bug_reports')
+      .select(`
+        *,
+        projects!inner(user_id)
+      `)
+      .eq('id', id)
+      .eq('projects.user_id', req.user.userId)
+      .single();
 
-    if (!report) {
+    if (fetchError || !report) {
       return res.status(404).json({ error: 'Bug report not found' });
     }
 
-    await runQuery('DELETE FROM bug_reports WHERE id = ?', [id]);
+    const { error: deleteError } = await supabase
+      .from('bug_reports')
+      .delete()
+      .eq('id', id);
+
+    if (deleteError) {
+      throw deleteError;
+    }
 
     res.json({ message: 'Bug report deleted successfully' });
   } catch (error) {

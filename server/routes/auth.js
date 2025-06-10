@@ -2,7 +2,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
-import { runQuery, getQuery } from '../database/init.js';
+import { supabase } from '../lib/supabase.js';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
@@ -17,7 +17,12 @@ router.post('/register', async (req, res) => {
     }
 
     // Check if user exists
-    const existingUser = await getQuery('SELECT id FROM users WHERE email = ?', [email]);
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', email)
+      .single();
+
     if (existingUser) {
       return res.status(400).json({ error: 'User already exists' });
     }
@@ -27,25 +32,41 @@ router.post('/register', async (req, res) => {
     const apiKey = uuidv4();
 
     // Create user
-    const result = await runQuery(
-      'INSERT INTO users (email, password_hash, api_key) VALUES (?, ?, ?)',
-      [email, passwordHash, apiKey]
-    );
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .insert({
+        email,
+        password_hash: passwordHash,
+        api_key: apiKey
+      })
+      .select()
+      .single();
+
+    if (userError) {
+      throw userError;
+    }
 
     // Create default project
     const projectApiKey = uuidv4();
-    await runQuery(
-      'INSERT INTO projects (user_id, name, api_key) VALUES (?, ?, ?)',
-      [result.id, 'Default Project', projectApiKey]
-    );
+    const { error: projectError } = await supabase
+      .from('projects')
+      .insert({
+        user_id: user.id,
+        name: 'Default Project',
+        api_key: projectApiKey
+      });
+
+    if (projectError) {
+      throw projectError;
+    }
 
     // Generate JWT
-    const token = jwt.sign({ userId: result.id }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
 
     res.status(201).json({
       message: 'User created successfully',
       token,
-      user: { id: result.id, email, apiKey }
+      user: { id: user.id, email: user.email, apiKey: user.api_key }
     });
   } catch (error) {
     console.error('Registration error:', error);
@@ -63,8 +84,13 @@ router.post('/login', async (req, res) => {
     }
 
     // Find user
-    const user = await getQuery('SELECT * FROM users WHERE email = ?', [email]);
-    if (!user) {
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', email)
+      .single();
+
+    if (error || !user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
@@ -109,12 +135,13 @@ export function authenticateToken(req, res, next) {
 // Get user profile
 router.get('/profile', authenticateToken, async (req, res) => {
   try {
-    const user = await getQuery(
-      'SELECT id, email, api_key, plan, created_at FROM users WHERE id = ?',
-      [req.user.userId]
-    );
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('id, email, api_key, plan, created_at')
+      .eq('id', req.user.userId)
+      .single();
 
-    if (!user) {
+    if (error || !user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
