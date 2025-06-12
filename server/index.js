@@ -8,7 +8,6 @@ import authRoutes from './routes/auth.js';
 import bugReportRoutes from './routes/bugReports.js';
 import analyticsRoutes from './routes/analytics.js';
 import widgetRoutes from './routes/widget.js';
-import { initDatabase } from './database/init.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -90,11 +89,9 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Something went wrong!' });
 });
 
-// Initialize database and start server
-initDatabase().then(() => {
-  app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`📊 Dashboard: http://localhost:${PORT}`);
-    console.log(`🔧 Widget: http://localhost:${PORT}/widget.js`);
-  });
-}).catch(console.error);
+// Start server
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📊 Dashboard: http://localhost:${PORT}`);
+  console.log(`🔧 Widget: http://localhost:${PORT}/widget.js`);
+});
