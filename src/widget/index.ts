@@ -324,21 +324,37 @@ class BugSpotWidget {
         tags: []
       };
 
-      // Submit to API
-      const response = await fetch(`${this.config.apiUrl}/api/bug-reports/submit`, {
+      // Submit to API. If network fails, persist locally for later sync.
+      let response: Response | null = null;
+      try {
+        response = await fetch(`${this.config.apiUrl}/api/bug-reports/submit`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-API-Key': this.config.apiKey
         },
         body: JSON.stringify(bugReport)
-      });
+        });
+      } catch (networkErr) {
+        response = null;
+      }
 
-      if (response.ok) {
+      if (response && response.ok) {
         this.showSuccessMessage();
         setTimeout(() => this.closeModal(), 2000);
       } else {
-        throw new Error('Failed to submit bug report');
+        // Fallback: save locally to allow dashboard mock analytics and later sync
+        try {
+          const key = 'bugspot_widget_reports';
+          const existing = localStorage.getItem(key);
+          const list = existing ? JSON.parse(existing) : [];
+          list.push({ ...bugReport, timestamp: new Date().toISOString(), status: 'open' });
+          localStorage.setItem(key, JSON.stringify(list));
+          this.showSuccessMessage();
+          setTimeout(() => this.closeModal(), 1500);
+        } catch (persistErr) {
+          throw new Error('Failed to submit bug report');
+        }
       }
 
     } catch (error) {

@@ -113,6 +113,11 @@ export default function BugReportDashboard() {
     resolved: reports.filter(r => r.status === 'resolved').length,
   };
 
+  // Simple AI summary preview for selected report
+  const aiSummary = selectedReport
+    ? `[${selectedReport.severity.toUpperCase()}] ${selectedReport.title} | Env: ${selectedReport.environment.browser} on ${selectedReport.environment.os}`
+    : '';
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -305,6 +310,9 @@ export default function BugReportDashboard() {
                 </div>
 
                 <div className="space-y-4">
+                  <div className="p-3 bg-indigo-50 rounded border border-indigo-100 text-sm text-indigo-800">
+                    <strong>AI Preview:</strong> {aiSummary}
+                  </div>
                   <div>
                     <label className="text-sm font-medium text-gray-700">Status</label>
                     <select

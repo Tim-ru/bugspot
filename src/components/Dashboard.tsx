@@ -156,6 +156,7 @@ export default function Dashboard() {
             <div>
               <h1 className="text-2xl font-bold text-gray-900">BugSpot Dashboard</h1>
               <p className="text-gray-600 mt-1">Monitor and manage bug reports</p>
+              <p className="text-xs text-gray-400 mt-1">Mock mode is {import.meta.env.VITE_USE_MOCK === 'true' ? 'ON' : 'OFF'}</p>
             </div>
             <div className="flex items-center gap-4">
               {projects.length > 0 && (

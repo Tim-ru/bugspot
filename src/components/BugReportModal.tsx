@@ -27,6 +27,7 @@ export default function BugReportModal({
   const [screenshot, setScreenshot] = useState<string>('');
   const [isCapturingScreenshot, setIsCapturingScreenshot] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [aiSummary, setAiSummary] = useState<string>('');
 
   const severityConfig = {
     low: { color: 'text-green-600', bg: 'bg-green-50', icon: Info },
@@ -121,6 +122,8 @@ export default function BugReportModal({
     try {
       saveBugReport(report);
       onSubmit?.(report);
+      // AI foundation: naive client-side heuristic summary placeholder
+      setAiSummary(generateLocalAiSummary(report));
       
       // Reset form
       setTitle('');
@@ -364,4 +367,19 @@ export default function BugReportModal({
       </div>
     </div>
   );
+}
+
+function generateLocalAiSummary(report: BugReport): string {
+  const lines: string[] = [];
+  lines.push(`[${report.severity.toUpperCase()}] ${report.title}`);
+  if (report.steps?.length) {
+    lines.push(`Steps: ${report.steps.slice(0, 3).join(' > ')}`);
+  }
+  if (report.environment?.browser || report.environment?.os) {
+    lines.push(`Env: ${report.environment.browser} on ${report.environment.os}`);
+  }
+  if (report.tags?.length) {
+    lines.push(`Tags: ${report.tags.slice(0, 5).join(', ')}`);
+  }
+  return lines.join(' | ');
 }

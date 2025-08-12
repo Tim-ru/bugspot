@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Bug, Mail, Lock, User, ArrowRight } from 'lucide-react';
+import { Bug, Mail, Lock,  ArrowRight } from 'lucide-react';
 
 interface AuthProps {
   onLogin: (token: string) => void;
@@ -33,7 +33,7 @@ export default function Auth({ onLogin }: AuthProps) {
       } else {
         setError(data.error || 'Authentication failed');
       }
-    } catch (error) {
+    } catch {
       setError('Network error. Please try again.');
     } finally {
       setLoading(false);

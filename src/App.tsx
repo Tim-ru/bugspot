@@ -1,7 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Bug, LogOut } from 'lucide-react';
+import { Bug, LogOut, LayoutDashboard, User, Wrench } from 'lucide-react';
 import Auth from './components/Auth';
 import Dashboard from './components/Dashboard';
+import BugsPage from './pages/BugsPage';
+import ProfilePage from './pages/ProfilePage';
+import IntegrationPage from './pages/IntegrationPage';
+import { navigate, useHashPath } from './router';
+import BugReportWidget from './components/BugReportWidget';
+// mockApi imported in main.tsx to ensure earliest bootstrap
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -33,6 +39,8 @@ function App() {
   }, []);
 
   const handleLogin = (token: string) => {
+    // Reference token to satisfy linter and allow future use
+    void token;
     setIsAuthenticated(true);
   };
 
@@ -71,20 +79,53 @@ function App() {
               </div>
               <h1 className="text-xl font-bold text-gray-900">BugSpot</h1>
             </div>
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <LogOut className="w-4 h-4" />
-              Sign Out
-            </button>
+            <div className="flex items-center gap-1">
+              <NavLink label="Dashboard" icon={<LayoutDashboard className="w-4 h-4" />} to="/" />
+              <NavLink label="Bugs" icon={<Wrench className="w-4 h-4" />} to="/bugs" />
+              <NavLink label="Integration" icon={<Bug className="w-4 h-4" />} to="/integration" />
+              <NavLink label="Profile" icon={<User className="w-4 h-4" />} to="/profile" />
+              <button
+                onClick={handleLogout}
+                className="ml-2 flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+                Sign Out
+              </button>
+            </div>
           </div>
         </div>
       </nav>
 
-      <Dashboard />
+      <AppRoutes />
+      {/* Global demo widget mount */}
+      <BugReportWidget />
     </div>
   );
 }
 
 export default App;
+
+function NavLink({ label, icon, to }: { label: string; icon: React.ReactNode; to: string }) {
+  const path = useHashPath();
+  const isActive = (to === '/' ? path === '/' : path.startsWith(to));
+  return (
+    <button
+      onClick={() => navigate(to)}
+      className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+        isActive ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-100'
+      }`}
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function AppRoutes() {
+  const path = useHashPath();
+  if (path === '/') return <Dashboard />;
+  if (path.startsWith('/bugs')) return <BugsPage />;
+  if (path.startsWith('/integration')) return <IntegrationPage />;
+  if (path.startsWith('/profile')) return <ProfilePage />;
+  return <Dashboard />;
+}
