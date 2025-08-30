@@ -83,8 +83,11 @@
         };
     </script>
 
+    <!-- Load html2canvas for screenshots -->
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    
     <!-- Load BugSpot Widget -->
-    <script src="../dist/widget.js"></script>
+    <script src="http://localhost:3001/widget.js"></script>
 
     <script>
         let widgetInstance = null;
@@ -136,6 +139,11 @@
         // Log when widget is loaded
         window.addEventListener('load', () => {
             console.log('BugSpot Widget loaded:', window.BugSpot);
+            if (window.BugSpot) {
+                console.log('✅ Widget API available');
+            } else {
+                console.error('❌ Widget API not available');
+            }
         });
     </script>
 </body>
