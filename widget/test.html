@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BugSpot Widget Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        p {
+            color: #666;
+            line-height: 1.6;
+        }
+        .test-button {
+            background: #3B82F6;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 0;
+        }
+        .test-button:hover {
+            background: #2563EB;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🐛 BugSpot Widget Test Page</h1>
+        <p>This page is used to test the BugSpot widget functionality. Click the floating button in the bottom-right corner to report a bug.</p>
+        
+        <h2>Test Features:</h2>
+        <ul>
+            <li>✅ Floating widget button</li>
+            <li>✅ Modal form with validation</li>
+            <li>✅ Screenshot capture</li>
+            <li>✅ Environment data collection</li>
+            <li>✅ API integration with fallback</li>
+        </ul>
+
+        <h2>Test Buttons:</h2>
+        <button class="test-button" onclick="testWidget()">Test Widget Programmatically</button>
+        <button class="test-button" onclick="testConfig()">Test Different Config</button>
+        <button class="test-button" onclick="testDestroy()">Destroy Widget</button>
+
+        <h2>Sample Content:</h2>
+        <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+        
+        <p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+
+        <div style="height: 1000px; background: linear-gradient(45deg, #f0f0f0, #e0e0e0); margin: 20px 0; display: flex; align-items: center; justify-content: center; border-radius: 8px;">
+            <p style="color: #666; font-size: 18px;">Scroll down to test the widget in different positions</p>
+        </div>
+    </div>
+
+    <!-- BugSpot Widget Configuration -->
+    <script>
+        window.bugSpotConfig = {
+            apiKey: 'test-api-key-123',
+            apiUrl: 'http://localhost:3001',
+            position: 'bottom-right',
+            primaryColor: '#3B82F6',
+            enableScreenshot: true,
+            showPreview: true
+        };
+    </script>
+
+    <!-- Load BugSpot Widget -->
+    <script src="../dist/widget.js"></script>
+
+    <script>
+        let widgetInstance = null;
+
+        function testWidget() {
+            if (window.BugSpot) {
+                widgetInstance = window.BugSpot.init({
+                    apiKey: 'test-api-key-123',
+                    apiUrl: 'http://localhost:3001',
+                    position: 'bottom-right',
+                    primaryColor: '#10B981',
+                    enableScreenshot: true
+                });
+                console.log('Widget initialized programmatically');
+            } else {
+                console.error('BugSpot not loaded');
+            }
+        }
+
+        function testConfig() {
+            if (window.BugSpot) {
+                // Destroy existing widget
+                if (widgetInstance) {
+                    widgetInstance.destroy();
+                }
+                
+                // Create new widget with different config
+                widgetInstance = window.BugSpot.init({
+                    apiKey: 'test-api-key-123',
+                    apiUrl: 'http://localhost:3001',
+                    position: 'top-left',
+                    primaryColor: '#EF4444',
+                    enableScreenshot: false
+                });
+                console.log('Widget reinitialized with new config');
+            }
+        }
+
+        function testDestroy() {
+            if (widgetInstance) {
+                widgetInstance.destroy();
+                widgetInstance = null;
+                console.log('Widget destroyed');
+            } else {
+                console.log('No widget instance to destroy');
+            }
+        }
+
+        // Log when widget is loaded
+        window.addEventListener('load', () => {
+            console.log('BugSpot Widget loaded:', window.BugSpot);
+        });
+    </script>
+</body>
+</html>

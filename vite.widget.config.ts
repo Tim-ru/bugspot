@@ -1,9 +1,10 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+  root: 'widget',
   build: {
     lib: {
-      entry: 'src/widget/index.ts',
+      entry: 'src/index.ts',
       name: 'BugSpot',
       fileName: 'widget',
       formats: ['iife']

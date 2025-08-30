@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import { RateLimiterMemory } from 'rate-limiter-flexible';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import fs from 'fs';
 import authRoutes from './routes/auth.js';
 import bugReportRoutes from './routes/bugReports.js';
 import analyticsRoutes from './routes/analytics.js';
@@ -14,6 +15,8 @@ const __dirname = dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const distDir = join(__dirname, '../dist');
+const indexHtmlPath = join(distDir, 'index.html');
 
 // Rate limiting
 const rateLimiter = new RateLimiterMemory({
@@ -48,7 +51,7 @@ app.use(cors({
 }));
 
 app.use(express.json({ limit: '10mb' }));
-app.use(express.static(join(__dirname, '../dist')));
+app.use(express.static(distDir));
 
 // Rate limiting middleware
 app.use(async (req, res, next) => {
@@ -70,7 +73,7 @@ app.use('/api/widget', widgetRoutes);
 app.get('/widget.js', (req, res) => {
   res.setHeader('Content-Type', 'application/javascript');
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.sendFile(join(__dirname, '../dist/widget.js'));
+  res.sendFile(join(__dirname, '../widget/dist/widget.js'));
 });
 
 // Health check
@@ -80,7 +83,14 @@ app.get('/api/health', (req, res) => {
 
 // Serve React app for all other routes
 app.get('*', (req, res) => {
-  res.sendFile(join(__dirname, '../dist/index.html'));
+  if (fs.existsSync(indexHtmlPath)) {
+    return res.sendFile(indexHtmlPath);
+  }
+  res.status(200).send(
+    `UI build not found. Expected file at ${indexHtmlPath}.\n` +
+    'The server is running, but the client build is missing. '
+    + 'Ensure "npm run build" produced the dist/ folder during deploy.'
+  );
 });
 
 // Error handling
@@ -94,4 +104,6 @@ app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📊 Dashboard: http://localhost:${PORT}`);
   console.log(`🔧 Widget: http://localhost:${PORT}/widget.js`);
+  console.log(`🗂️ Dist directory: ${distDir} (exists: ${fs.existsSync(distDir)})`);
+  console.log(`📄 Index HTML path: ${indexHtmlPath} (exists: ${fs.existsSync(indexHtmlPath)})`);
 });
