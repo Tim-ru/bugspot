@@ -257,6 +257,19 @@ export class BugSpotWidget {
         opacity: 0.6;
         cursor: not-allowed;
       }
+      
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      
+      .bugspot-modal .bugspot-screenshot-placeholder img {
+        transition: all 0.3s ease;
+      }
+      
+      .bugspot-modal .bugspot-screenshot-placeholder img:hover {
+        transform: scale(1.02);
+      }
     `;
   }
 

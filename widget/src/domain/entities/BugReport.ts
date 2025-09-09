@@ -23,6 +23,11 @@ export interface EnvironmentData {
   timestamp: string;
   language: string;
   platform: string;
+  // Расширенный контекст
+  errors?: any[];
+  domState?: any;
+  performance?: any;
+  networkRequests?: any[];
 }
 
 export interface BugReportConfig {

@@ -77,32 +77,60 @@ export class Modal {
 
     const container = this.element.querySelector('.bugspot-screenshot-container') as HTMLElement;
     const placeholder = container?.querySelector('.bugspot-screenshot-placeholder') as HTMLElement;
+    const retakeBtn = this.element.querySelector('.bugspot-retake') as HTMLElement;
     
     if (!container || !placeholder) return;
 
     try {
+      // Показываем индикатор загрузки
+      placeholder.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; padding: 20px; color: #6b7280;">
+          <div style="width: 24px; height: 24px; border: 2px solid #e5e7eb; border-top: 2px solid #3b82f6; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 8px;"></div>
+          <span>Capturing screenshot...</span>
+        </div>
+      `;
+      
+      if (retakeBtn) retakeBtn.disabled = true;
+
       // Скрываем модальное окно временно
       this.element.style.display = 'none';
       
       // Ждем рендеринга страницы
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, 200));
 
-      // Создаем скриншот
-      const screenshotData = await this.screenshotService.capture();
+      // Создаем скриншот с предпросмотром
+      const screenshotResult = await this.screenshotService.captureWithPreview();
 
       // Показываем модальное окно снова
       this.element.style.display = 'block';
 
-      // Обновляем UI
-      placeholder.innerHTML = `<img src="${screenshotData}" alt="Screenshot" style="max-width: 100%; height: auto; border-radius: 4px;">`;
+      // Обновляем UI с предпросмотром
+      placeholder.innerHTML = `
+        <div style="position: relative;">
+          <img src="${screenshotResult.preview}" alt="Screenshot Preview" 
+               style="max-width: 100%; height: auto; border-radius: 4px; cursor: pointer;"
+               onclick="this.src = '${screenshotResult.dataUrl}'; this.style.maxWidth = '100%';">
+          <div style="position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.7); color: white; padding: 4px 8px; border-radius: 4px; font-size: 12px;">
+            Click to view full size
+          </div>
+        </div>
+      `;
       
       // Сохраняем данные скриншота
-      (placeholder as any).screenshotData = screenshotData;
+      (placeholder as any).screenshotData = screenshotResult.dataUrl;
 
     } catch (error) {
       console.error('Screenshot capture failed:', error);
       this.element.style.display = 'block';
-      placeholder.innerHTML = '<span>❌ Screenshot failed</span>';
+      placeholder.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; padding: 20px; color: #ef4444;">
+          <span style="font-size: 24px; margin-bottom: 8px;">❌</span>
+          <span>Screenshot failed</span>
+          <span style="font-size: 12px; color: #6b7280; margin-top: 4px;">Click retake to try again</span>
+        </div>
+      `;
+    } finally {
+      if (retakeBtn) retakeBtn.disabled = false;
     }
   }
 

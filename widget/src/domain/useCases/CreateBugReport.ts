@@ -1,8 +1,13 @@
 import { BugReport, EnvironmentData } from '../entities/BugReport';
 import { BugReportRepository } from '../interfaces/BugReportRepository';
+import { ContextCollector } from '../../application/services/ContextCollector';
 
 export class CreateBugReport {
-  constructor(private bugReportRepository: BugReportRepository) {}
+  private contextCollector: ContextCollector;
+
+  constructor(private bugReportRepository: BugReportRepository) {
+    this.contextCollector = new ContextCollector();
+  }
 
   async execute(data: {
     title: string;
@@ -22,16 +27,24 @@ export class CreateBugReport {
       return { success: false, error: 'Description is required' };
     }
 
-    // Сбор данных окружения
+    // Сбор расширенных данных окружения
     const environment = this.collectEnvironmentData();
+    const contextData = this.contextCollector.collectAllContext();
 
-    // Создание bug report
+    // Создание bug report с расширенным контекстом
     const bugReport: BugReport = {
       title: data.title.trim(),
       description: data.description.trim(),
       severity: data.severity,
       screenshot: data.screenshot,
-      environment,
+      environment: {
+        ...environment,
+        // Добавляем расширенный контекст
+        errors: contextData.errors,
+        domState: contextData.domState,
+        performance: contextData.performance,
+        networkRequests: contextData.network
+      },
       userEmail: data.userEmail?.trim(),
       userAgent: navigator.userAgent,
       url: window.location.href,
