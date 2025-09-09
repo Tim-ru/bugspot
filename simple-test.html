@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple BugSpot Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <h1>BugSpot Widget Test</h1>
+    <div id="status" class="status error">Loading...</div>
+    <p>If the widget is working, you should see a floating button in the bottom-right corner.</p>
+
+    <script>
+        // Simple configuration
+        window.bugSpotConfig = {
+            apiKey: 'test-key',
+            apiUrl: 'http://localhost:3001',
+            position: 'bottom-right',
+            primaryColor: '#3B82F6'
+        };
+    </script>
+
+    <!-- Load html2canvas -->
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    
+    <!-- Load widget -->
+    <script src="http://localhost:3001/widget.js"></script>
+
+    <script>
+        window.addEventListener('load', () => {
+            const status = document.getElementById('status');
+            
+            if (window.BugSpot) {
+                status.textContent = '✅ BugSpot loaded successfully!';
+                status.className = 'status success';
+                console.log('BugSpot available:', window.BugSpot);
+            } else {
+                status.textContent = '❌ BugSpot failed to load';
+                status.className = 'status error';
+                console.error('BugSpot not available');
+            }
+        });
+    </script>
+</body>
+</html>

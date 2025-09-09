@@ -19,14 +19,14 @@
             border-radius: 12px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
-        h1 {
-            color: #333;
-            margin-bottom: 20px;
+        .status {
+            padding: 10px;
+            border-radius: 6px;
+            margin: 10px 0;
+            font-weight: bold;
         }
-        p {
-            color: #666;
-            line-height: 1.6;
-        }
+        .success { background: #d1fae5; color: #065f46; }
+        .error { background: #fee2e2; color: #991b1b; }
         .test-button {
             background: #3B82F6;
             color: white;
@@ -37,39 +37,21 @@
             font-size: 16px;
             margin: 10px 0;
         }
-        .test-button:hover {
-            background: #2563EB;
-        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🐛 BugSpot Widget Test Page</h1>
-        <div id="status" style="padding: 10px; margin: 10px 0; border-radius: 4px; background: #f8d7da; color: #721c24;">Loading...</div>
-        <p>This page is used to test the BugSpot widget functionality. Click the floating button in the bottom-right corner to report a bug.</p>
+        <h1>🐛 BugSpot Widget Test</h1>
         
-        <h2>Test Features:</h2>
-        <ul>
-            <li>✅ Floating widget button</li>
-            <li>✅ Modal form with validation</li>
-            <li>✅ Screenshot capture</li>
-            <li>✅ Environment data collection</li>
-            <li>✅ API integration with fallback</li>
-        </ul>
-
+        <div id="status" class="status error">Loading...</div>
+        
         <h2>Test Buttons:</h2>
         <button class="test-button" onclick="testWidget()">Test Widget Programmatically</button>
         <button class="test-button" onclick="testConfig()">Test Different Config</button>
         <button class="test-button" onclick="testDestroy()">Destroy Widget</button>
 
         <h2>Sample Content:</h2>
-        <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
-        
-        <p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
-
-        <div style="height: 1000px; background: linear-gradient(45deg, #f0f0f0, #e0e0e0); margin: 20px 0; display: flex; align-items: center; justify-content: center; border-radius: 8px;">
-            <p style="color: #666; font-size: 18px;">Scroll down to test the widget in different positions</p>
-        </div>
+        <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
     </div>
 
     <!-- BugSpot Widget Configuration -->
@@ -93,6 +75,12 @@
     <script>
         let widgetInstance = null;
 
+        function updateStatus(message, isSuccess = false) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.className = `status ${isSuccess ? 'success' : 'error'}`;
+        }
+
         function testWidget() {
             if (window.BugSpot) {
                 widgetInstance = window.BugSpot.init({
@@ -102,20 +90,20 @@
                     primaryColor: '#10B981',
                     enableScreenshot: true
                 });
+                updateStatus('✅ Widget initialized programmatically', true);
                 console.log('Widget initialized programmatically');
             } else {
+                updateStatus('❌ BugSpot not loaded', false);
                 console.error('BugSpot not loaded');
             }
         }
 
         function testConfig() {
             if (window.BugSpot) {
-                // Destroy existing widget
                 if (widgetInstance) {
                     widgetInstance.destroy();
                 }
                 
-                // Create new widget with different config
                 widgetInstance = window.BugSpot.init({
                     apiKey: 'test-api-key-123',
                     apiUrl: 'http://localhost:3001',
@@ -123,7 +111,10 @@
                     primaryColor: '#EF4444',
                     enableScreenshot: false
                 });
+                updateStatus('✅ Widget reinitialized with new config', true);
                 console.log('Widget reinitialized with new config');
+            } else {
+                updateStatus('❌ BugSpot not loaded', false);
             }
         }
 
@@ -131,27 +122,31 @@
             if (widgetInstance) {
                 widgetInstance.destroy();
                 widgetInstance = null;
+                updateStatus('✅ Widget destroyed', true);
                 console.log('Widget destroyed');
             } else {
-                console.log('No widget instance to destroy');
+                updateStatus('ℹ️ No widget instance to destroy', false);
             }
         }
 
-        // Log when widget is loaded
+        // Check widget loading
         window.addEventListener('load', () => {
-            const statusEl = document.getElementById('status');
+            console.log('Page loaded, checking BugSpot...');
             console.log('BugSpot Widget loaded:', window.BugSpot);
+            
             if (window.BugSpot) {
-                statusEl.textContent = '✅ BugSpot Widget loaded successfully!';
-                statusEl.style.background = '#d4edda';
-                statusEl.style.color = '#155724';
+                updateStatus('✅ BugSpot Widget loaded successfully!', true);
                 console.log('✅ Widget API available');
             } else {
-                statusEl.textContent = '❌ BugSpot Widget failed to load';
-                statusEl.style.background = '#f8d7da';
-                statusEl.style.color = '#721c24';
+                updateStatus('❌ BugSpot Widget failed to load', false);
                 console.error('❌ Widget API not available');
             }
+        });
+
+        // Check for errors
+        window.addEventListener('error', (e) => {
+            console.error('Page error:', e.error);
+            updateStatus(`❌ Error: ${e.message}`, false);
         });
     </script>
 </body>
