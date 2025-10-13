@@ -10,28 +10,37 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-producti
 // Register
 router.post('/register', async (req, res) => {
   try {
+    console.log('Registration request received:', req.body);
     const { email, password } = req.body;
 
     if (!email || !password) {
+      console.log('Missing email or password');
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
+    console.log('Checking if user exists...');
     // Check if user exists
-    const { data: existingUser } = await supabase
+    const { data: existingUser, error: checkError } = await supabase
       .from('users')
       .select('id')
       .eq('email', email)
       .single();
 
+    console.log('User check result:', { existingUser, checkError });
+
     if (existingUser) {
+      console.log('User already exists');
       return res.status(400).json({ error: 'User already exists' });
     }
 
     // Hash password
+    console.log('Hashing password...');
     const passwordHash = await bcrypt.hash(password, 10);
     const apiKey = uuidv4();
+    console.log('Password hashed, API key generated');
 
     // Create user
+    console.log('Creating user...');
     const { data: user, error: userError } = await supabase
       .from('users')
       .insert({
@@ -42,11 +51,15 @@ router.post('/register', async (req, res) => {
       .select()
       .single();
 
+    console.log('User creation result:', { user, userError });
+
     if (userError) {
+      console.error('User creation error:', userError);
       throw userError;
     }
 
     // Create default project
+    console.log('Creating default project...');
     const projectApiKey = uuidv4();
     const { error: projectError } = await supabase
       .from('projects')
@@ -56,13 +69,18 @@ router.post('/register', async (req, res) => {
         api_key: projectApiKey
       });
 
+    console.log('Project creation result:', { projectError });
+
     if (projectError) {
+      console.error('Project creation error:', projectError);
       throw projectError;
     }
 
     // Generate JWT
+    console.log('Generating JWT...');
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
 
+    console.log('Registration successful');
     res.status(201).json({
       message: 'User created successfully',
       token,
