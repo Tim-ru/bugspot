@@ -124,18 +124,20 @@ class MockDatabase {
         }
       }),
       insert: (data) => ({
-        select: async () => {
-          if (table === 'users') {
-            return await this.createUser(data);
-          } else if (table === 'projects') {
-            return await this.createProject(data);
-          } else if (table === 'bug_reports') {
-            return await this.createBugReport(data);
-          } else if (table === 'analytics') {
-            return await this.createAnalytics(data);
+        select: () => ({
+          single: async () => {
+            if (table === 'users') {
+              return await this.createUser(data);
+            } else if (table === 'projects') {
+              return await this.createProject(data);
+            } else if (table === 'bug_reports') {
+              return await this.createBugReport(data);
+            } else if (table === 'analytics') {
+              return await this.createAnalytics(data);
+            }
+            return { data: null, error: null };
           }
-          return { data: null, error: null };
-        }
+        })
       }),
       update: (data) => ({
         eq: (column, value) => ({
