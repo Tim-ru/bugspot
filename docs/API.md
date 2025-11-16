@@ -211,7 +211,14 @@ Authorization: Bearer <jwt-token>
     "steps": ["Navigate to contact page", "Fill out form"],
     "tags": ["ui", "form"],
     "created_at": "2024-01-01T12:00:00.000Z",
-    "updated_at": "2024-01-01T12:00:00.000Z"
+    "updated_at": "2024-01-01T12:00:00.000Z",
+    "aiAnalysis": {
+      "area": "frontend",
+      "category": "ui",
+      "estimatedHours": 2,
+      "confidence": 0.82,
+      "summary": "MEDIUM issue likely in frontend | category: ui | env: Chrome on macOS"
+    }
   }
 ]
 ```
@@ -368,6 +375,13 @@ interface BugReport {
   tags: string[];
   created_at: string;
   updated_at: string;
+  aiAnalysis?: {
+    area: 'frontend' | 'backend' | 'fullstack';
+    category: 'api' | 'auth' | 'ui' | 'performance' | 'other';
+    estimatedHours: number;
+    confidence: number;
+    summary: string;
+  };
 }
 ```
 

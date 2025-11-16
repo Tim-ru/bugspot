@@ -5,7 +5,8 @@ import {
   Bug, Zap, Info
 } from 'lucide-react';
 import { BugReport } from '../types';
-import { getBugReports, updateBugReport, deleteBugReport, exportBugReports } from '../utils/storage';
+
+const AI_ANALYSIS_ENABLED = import.meta.env.VITE_AI_ANALYSIS_ENABLED === 'true';
 
 export default function BugReportDashboard() {
   const [reports, setReports] = useState<BugReport[]>([]);
@@ -14,6 +15,8 @@ export default function BugReportDashboard() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [severityFilter, setSeverityFilter] = useState<string>('all');
   const [selectedReport, setSelectedReport] = useState<BugReport | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string>('');
 
   useEffect(() => {
     loadReports();
@@ -23,9 +26,36 @@ export default function BugReportDashboard() {
     filterReports();
   }, [reports, searchTerm, statusFilter, severityFilter]);
 
-  const loadReports = () => {
-    const savedReports = getBugReports();
-    setReports(savedReports);
+  const loadReports = async () => {
+    const token = localStorage.getItem('bugspot_token');
+    if (!token) {
+      setError('Not authenticated');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch('/api/bug-reports/', {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        const apiReports = await response.json();
+        setReports(apiReports);
+      } else {
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to load reports');
+      }
+    } catch (error) {
+      console.error('Failed to load reports:', error);
+      setError('Network error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const filterReports = () => {
@@ -50,23 +80,64 @@ export default function BugReportDashboard() {
     setFilteredReports(filtered);
   };
 
-  const handleStatusChange = (reportId: string, newStatus: BugReport['status']) => {
-    updateBugReport(reportId, { status: newStatus });
-    loadReports();
+  const handleStatusChange = async (reportId: string, newStatus: BugReport['status']) => {
+    const token = localStorage.getItem('bugspot_token');
+    if (!token) return;
+
+    try {
+      const response = await fetch(`/api/bug-reports/${reportId}/status`, {
+        method: 'PUT',
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ status: newStatus })
+      });
+      
+      if (response.ok) {
+        await loadReports(); // Reload reports
+      } else {
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to update status');
+      }
+    } catch (error) {
+      console.error('Failed to update status:', error);
+      setError('Network error');
+    }
   };
 
-  const handleDelete = (reportId: string) => {
-    if (confirm('Are you sure you want to delete this bug report?')) {
-      deleteBugReport(reportId);
-      loadReports();
-      if (selectedReport?.id === reportId) {
-        setSelectedReport(null);
+  const handleDelete = async (reportId: string) => {
+    if (!confirm('Are you sure you want to delete this bug report?')) return;
+    
+    const token = localStorage.getItem('bugspot_token');
+    if (!token) return;
+
+    try {
+      const response = await fetch(`/api/bug-reports/${reportId}`, {
+        method: 'DELETE',
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        await loadReports(); // Reload reports
+        if (selectedReport?.id === reportId) {
+          setSelectedReport(null);
+        }
+      } else {
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to delete report');
       }
+    } catch (error) {
+      console.error('Failed to delete report:', error);
+      setError('Network error');
     }
   };
 
   const handleExport = () => {
-    const data = exportBugReports();
+    const data = JSON.stringify(reports, null, 2);
     const blob = new Blob([data], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -113,20 +184,96 @@ export default function BugReportDashboard() {
     resolved: reports.filter(r => r.status === 'resolved').length,
   };
 
-  // Simple AI summary preview for selected report
-  const aiSummary = selectedReport
-    ? `[${selectedReport.severity.toUpperCase()}] ${selectedReport.title} | Env: ${selectedReport.environment.browser} on ${selectedReport.environment.os}`
-    : '';
+  // AI insights preview for selected report
+  const aiSummary = (() => {
+    if (!selectedReport) return '';
+
+    if (AI_ANALYSIS_ENABLED && selectedReport.aiAnalysis) {
+      const { area, category, estimatedHours, confidence, summary } = selectedReport.aiAnalysis;
+      const confidencePercent = Math.round(confidence * 100);
+      return `AI: ${area}/${category} • ~${estimatedHours}h • ${confidencePercent}% | ${summary}`;
+    }
+
+    if (AI_ANALYSIS_ENABLED && !selectedReport.aiAnalysis) {
+      return 'AI analysis pending...';
+    }
+
+    // Fallback: local heuristic summary when AI feature is disabled
+    return `[${selectedReport.severity.toUpperCase()}] ${selectedReport.title} | Env: ${selectedReport.environment.browser} on ${selectedReport.environment.os}`;
+  })();
+
+  // Show loading state
+  if (loading && reports.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading bug reports...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (error && reports.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-red-600 mb-4">
+            <AlertTriangle className="w-12 h-12 mx-auto mb-2" />
+            <p className="text-lg font-medium">Error loading reports</p>
+            <p className="text-sm text-gray-600 mt-2">{error}</p>
+          </div>
+          <button 
+            onClick={loadReports}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Error banner */}
+      {error && (
+        <div className="bg-red-50 border-l-4 border-red-400 p-4">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <AlertTriangle className="h-5 w-5 text-red-400" />
+            </div>
+            <div className="ml-3">
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+            <div className="ml-auto pl-3">
+              <button 
+                onClick={() => setError('')}
+                className="text-red-400 hover:text-red-600"
+              >
+                <XCircle className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Header */}
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 py-6">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Bug Reports Dashboard</h1>
-              <p className="text-gray-600 mt-1">Manage and track reported issues</p>
+              <p className="text-gray-600 mt-1 flex items-center gap-2">
+                <span>Manage and track reported issues</span>
+                {AI_ANALYSIS_ENABLED && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold rounded-full bg-purple-100 text-purple-700 border border-purple-200">
+                    <Zap className="w-3 h-3" />
+                    AI insights (Pro)
+                  </span>
+                )}
+              </p>
             </div>
             <button
               onClick={handleExport}
@@ -274,12 +421,21 @@ export default function BugReportDashboard() {
                           </div>
                         )}
                       </div>
-                      {report.tags.length > 0 && (
-                        <div className="flex items-center gap-1">
-                          <Tag className="w-4 h-4" />
-                          {report.tags.length}
-                        </div>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {report.tags.length > 0 && (
+                          <div className="flex items-center gap-1">
+                            <Tag className="w-4 h-4" />
+                            {report.tags.length}
+                          </div>
+                        )}
+                        {AI_ANALYSIS_ENABLED && report.aiAnalysis && (
+                          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-xs font-medium border border-purple-100">
+                            <Zap className="w-3 h-3" />
+                            <span>{report.aiAnalysis.area}/{report.aiAnalysis.category}</span>
+                            <span>· ~{report.aiAnalysis.estimatedHours}h</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );

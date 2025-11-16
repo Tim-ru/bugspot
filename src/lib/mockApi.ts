@@ -3,9 +3,7 @@
  * Intercepts fetch calls to '/api/*' and serves deterministic mock data.
  */
 
-const shouldEnableMock =
-  (typeof window !== 'undefined' && (window as any).BUGSPOT_USE_MOCK === true) ||
-  (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_USE_MOCK === 'true');
+const shouldEnableMock = false; // Disabled to use real backend API
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
 

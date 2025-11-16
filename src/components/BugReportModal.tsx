@@ -3,7 +3,6 @@ import { X, Camera, AlertTriangle, Info, Bug, Zap } from 'lucide-react';
 import { BugReport, WidgetConfig } from '../types';
 import { captureScreenshot } from '../utils/screenshotCapture';
 import { collectEnvironmentData } from '../utils/environmentData';
-import { saveBugReport } from '../utils/storage';
 
 interface BugReportModalProps {
   isOpen: boolean;
@@ -120,23 +119,56 @@ export default function BugReportModal({
     };
 
     try {
-      saveBugReport(report);
-      onSubmit?.(report);
-      // AI foundation: naive client-side heuristic summary placeholder
-      setAiSummary(generateLocalAiSummary(report));
-      
-      // Reset form
-      setTitle('');
-      setDescription('');
-      setSeverity('medium');
-      setUserEmail('');
-      setSteps(['']);
-      setTags([]);
-      setScreenshot('');
-      
-      onClose();
+      // Submit to API instead of local storage
+      const token = localStorage.getItem('bugspot_token');
+      if (!token) {
+        throw new Error('Not authenticated');
+      }
+
+      const response = await fetch('/api/bug-reports/submit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'X-API-Key': config?.apiKey || ''
+        },
+        body: JSON.stringify({
+          title: report.title,
+          description: report.description,
+          severity: report.severity,
+          screenshot: report.screenshot,
+          environment: report.environment,
+          userEmail: report.userEmail,
+          userAgent: report.environment.userAgent,
+          url: report.environment.url,
+          steps: report.steps,
+          tags: report.tags
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        onSubmit?.(report);
+        // AI foundation: naive client-side heuristic summary placeholder
+        setAiSummary(generateLocalAiSummary(report));
+        
+        // Reset form
+        setTitle('');
+        setDescription('');
+        setSeverity('medium');
+        setUserEmail('');
+        setSteps(['']);
+        setTags([]);
+        setScreenshot('');
+        
+        onClose();
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to submit bug report');
+      }
     } catch (error) {
       console.error('Failed to submit bug report:', error);
+      // You could add error state handling here
     } finally {
       setIsSubmitting(false);
     }

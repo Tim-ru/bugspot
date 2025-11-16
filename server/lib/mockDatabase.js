@@ -111,6 +111,9 @@ class MockDatabase {
             if (table === 'users') {
               const users = Array.from(this.users.values()).slice(0, count);
               return { data: users, error: null };
+            } else if (table === 'bug_reports') {
+              const reports = Array.from(this.bugReports.values()).slice(0, count);
+              return { data: reports, error: null };
             }
             return { data: [], error: null };
           }
@@ -119,10 +122,30 @@ class MockDatabase {
           if (table === 'users') {
             const users = Array.from(this.users.values()).slice(0, count);
             return { data: users, error: null };
+          } else if (table === 'bug_reports') {
+            const reports = Array.from(this.bugReports.values()).slice(0, count);
+            return { data: reports, error: null };
           }
           return { data: [], error: null };
         }
       }),
+      // Support for complex queries with then method
+      then: async (resolve) => {
+        if (table === 'bug_reports') {
+          const reports = Array.from(this.bugReports.values());
+          // Add project names to reports
+          const reportsWithProjects = reports.map(report => ({
+            ...report,
+            projects: { name: 'Default Project' }
+          }));
+          resolve({ data: reportsWithProjects, error: null });
+        } else if (table === 'projects') {
+          const projects = Array.from(this.projects.values());
+          resolve({ data: projects, error: null });
+        } else {
+          resolve({ data: [], error: null });
+        }
+      },
       insert: (data) => ({
         select: () => ({
           single: async () => {
@@ -142,7 +165,46 @@ class MockDatabase {
       update: (data) => ({
         eq: (column, value) => ({
           select: async () => {
-            // Mock update - just return the data
+            if (table === 'bug_reports' && column === 'id') {
+              const existing = this.bugReports.get(value);
+              if (!existing) {
+                return { data: null, error: new Error('Bug report not found') };
+              }
+              const updated = {
+                ...existing,
+                ...data
+              };
+              this.bugReports.set(value, updated);
+              return { data: updated, error: null };
+            }
+
+            if (table === 'users' && column === 'id') {
+              const existing = this.users.get(value);
+              if (!existing) {
+                return { data: null, error: new Error('User not found') };
+              }
+              const updated = {
+                ...existing,
+                ...data
+              };
+              this.users.set(value, updated);
+              return { data: updated, error: null };
+            }
+
+            if (table === 'projects' && column === 'id') {
+              const existing = this.projects.get(value);
+              if (!existing) {
+                return { data: null, error: new Error('Project not found') };
+              }
+              const updated = {
+                ...existing,
+                ...data
+              };
+              this.projects.set(value, updated);
+              return { data: updated, error: null };
+            }
+
+            // Fallback behaviour
             return { data: { ...data, id: value }, error: null };
           }
         })

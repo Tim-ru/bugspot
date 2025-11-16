@@ -1,6 +1,7 @@
 import express from 'express';
 import { supabase } from '../lib/supabase.js';
 import { authenticateToken } from './auth.js';
+import { analyzeBugReport } from '../lib/aiClient.js';
 
 const router = express.Router();
 
@@ -82,6 +83,39 @@ router.post('/submit', verifyApiKey, async (req, res) => {
         event_data: { severity, hasScreenshot: !!screenshot }
       });
 
+    // Trigger AI analysis in the background (best-effort, non-blocking)
+    try {
+      const aiPayload = {
+        title,
+        description,
+        severity,
+        environment,
+        steps: steps || [],
+        tags: tags || []
+      };
+
+      // Fire and forget – we don't want to delay the user response
+      Promise.resolve()
+        .then(() => analyzeBugReport(aiPayload))
+        .then(async (analysis) => {
+          if (!analysis) return;
+          await supabase
+            .from('bug_reports')
+            .update({
+              ai_analysis: analysis,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', report.id)
+            .select()
+            .single();
+        })
+        .catch((err) => {
+          console.error('AI analysis error:', err);
+        });
+    } catch (err) {
+      console.error('AI analysis scheduling error:', err);
+    }
+
     res.status(201).json({
       message: 'Bug report submitted successfully',
       id: report.id
@@ -125,10 +159,11 @@ router.get('/', authenticateToken, async (req, res) => {
       throw error;
     }
 
-    // Format the response
+    // Format the response, including AI analysis if available
     const formattedReports = reports.map(report => ({
       ...report,
-      project_name: report.projects.name
+      project_name: report.projects.name,
+      aiAnalysis: report.ai_analysis || null
     }));
 
     res.json(formattedReports);

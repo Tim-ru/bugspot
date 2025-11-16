@@ -1,3 +1,15 @@
+export type AiBugArea = 'frontend' | 'backend' | 'fullstack';
+
+export type AiBugCategory = 'api' | 'auth' | 'ui' | 'performance' | 'other';
+
+export interface AiBugAnalysis {
+  area: AiBugArea;
+  category: AiBugCategory;
+  estimatedHours: number;
+  confidence: number;
+  summary: string;
+}
+
 export interface BugReport {
   id: string;
   title: string;
@@ -10,6 +22,7 @@ export interface BugReport {
   userEmail?: string;
   tags: string[];
   steps: string[];
+  aiAnalysis?: AiBugAnalysis;
 }
 
 export interface EnvironmentData {
