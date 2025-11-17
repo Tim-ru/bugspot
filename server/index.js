@@ -52,7 +52,15 @@ app.use(cors({
 }));
 
 app.use(express.json({ limit: '10mb' }));
-app.use(express.static(distDir));
+
+// Handle OPTIONS requests for CORS (API routes only)
+app.options('/api/*', (req, res) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.sendStatus(200);
+});
 
 // Rate limiting middleware
 app.use(async (req, res, next) => {
@@ -64,11 +72,14 @@ app.use(async (req, res, next) => {
   }
 });
 
-// Routes
+// API Routes - must be before static middleware
 app.use('/api/auth', authRoutes);
 app.use('/api/bug-reports', bugReportRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/widget', widgetRoutes);
+
+// Static files - after API routes
+app.use(express.static(distDir));
 
 // Widget endpoint
 app.get('/widget.js', (req, res) => {
