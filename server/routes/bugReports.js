@@ -48,8 +48,45 @@ router.post('/submit', verifyApiKey, async (req, res) => {
       tags
     } = req.body;
 
-    if (!title || !description) {
-      return res.status(400).json({ error: 'Title and description are required' });
+    // Валидация входных данных
+    if (!title || typeof title !== 'string' || !title.trim()) {
+      return res.status(400).json({ error: 'Title is required and must be a non-empty string' });
+    }
+
+    if (!description || typeof description !== 'string' || !description.trim()) {
+      return res.status(400).json({ error: 'Description is required and must be a non-empty string' });
+    }
+
+    // Валидация severity
+    const validSeverities = ['low', 'medium', 'high', 'critical'];
+    if (severity && !validSeverities.includes(severity)) {
+      return res.status(400).json({ error: `Severity must be one of: ${validSeverities.join(', ')}` });
+    }
+
+    // Валидация длины полей
+    if (title.trim().length > 500) {
+      return res.status(400).json({ error: 'Title must be less than 500 characters' });
+    }
+
+    if (description.trim().length > 10000) {
+      return res.status(400).json({ error: 'Description must be less than 10000 characters' });
+    }
+
+    // Валидация email если предоставлен
+    if (userEmail && typeof userEmail === 'string' && userEmail.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(userEmail.trim())) {
+        return res.status(400).json({ error: 'Invalid email format' });
+      }
+    }
+
+    // Валидация screenshot размера (если base64)
+    if (screenshot && typeof screenshot === 'string') {
+      // Примерная проверка размера base64 (1MB limit)
+      const base64Size = (screenshot.length * 3) / 4;
+      if (base64Size > 1024 * 1024) {
+        return res.status(400).json({ error: 'Screenshot size exceeds 1MB limit' });
+      }
     }
 
     const { data: report, error: reportError } = await supabase
@@ -59,29 +96,44 @@ router.post('/submit', verifyApiKey, async (req, res) => {
         title: title.trim(),
         description: description.trim(),
         severity,
-        screenshot,
-        environment,
+        screenshot: screenshot || null,
+        environment: environment || {},
         user_email: userEmail?.trim() || null,
-        user_agent: userAgent,
-        url,
-        steps: steps || [],
-        tags: tags || []
+        user_agent: userAgent || null,
+        url: url || null,
+        steps: Array.isArray(steps) ? steps : [],
+        tags: Array.isArray(tags) ? tags : []
       })
       .select()
       .single();
 
     if (reportError) {
+      console.error('Database error creating bug report:', reportError);
+      
+      // Более детальные сообщения об ошибках
+      if (reportError.code === '23505') { // Unique violation
+        return res.status(409).json({ error: 'Bug report already exists' });
+      }
+      if (reportError.code === '23503') { // Foreign key violation
+        return res.status(400).json({ error: 'Invalid project ID' });
+      }
+      
       throw reportError;
     }
 
-    // Track analytics
-    await supabase
-      .from('analytics')
-      .insert({
-        project_id: req.project.id,
-        event_type: 'bug_report_submitted',
-        event_data: { severity, hasScreenshot: !!screenshot }
-      });
+    // Track analytics (не блокируем при ошибке)
+    try {
+      await supabase
+        .from('analytics')
+        .insert({
+          project_id: req.project.id,
+          event_type: 'bug_report_submitted',
+          event_data: { severity, hasScreenshot: !!screenshot }
+        });
+    } catch (analyticsError) {
+      console.warn('Analytics tracking failed (non-critical):', analyticsError);
+      // Не прерываем выполнение при ошибке аналитики
+    }
 
     // Trigger AI analysis in the background (best-effort, non-blocking)
     try {
@@ -110,10 +162,10 @@ router.post('/submit', verifyApiKey, async (req, res) => {
             .single();
         })
         .catch((err) => {
-          console.error('AI analysis error:', err);
+          console.error('AI analysis error (non-critical):', err);
         });
     } catch (err) {
-      console.error('AI analysis scheduling error:', err);
+      console.error('AI analysis scheduling error (non-critical):', err);
     }
 
     res.status(201).json({
@@ -122,7 +174,13 @@ router.post('/submit', verifyApiKey, async (req, res) => {
     });
   } catch (error) {
     console.error('Bug report submission error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    
+    // Более информативные сообщения об ошибках
+    if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
+      return res.status(503).json({ error: 'Database connection failed. Please try again later.' });
+    }
+    
+    res.status(500).json({ error: 'Internal server error. Please try again later.' });
   }
 });
 

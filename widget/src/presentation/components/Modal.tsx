@@ -98,8 +98,13 @@ export class Modal {
       // Ждем рендеринга страницы
       await new Promise(resolve => setTimeout(resolve, 200));
 
-      // Создаем скриншот с предпросмотром
-      const screenshotResult = await this.screenshotService.captureWithPreview();
+      // Создаем скриншот с предпросмотром и timeout
+      const screenshotPromise = this.screenshotService.captureWithPreview();
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Screenshot timeout')), 5000)
+      );
+
+      const screenshotResult = await Promise.race([screenshotPromise, timeoutPromise]) as any;
 
       // Показываем модальное окно снова
       this.element.style.display = 'block';
@@ -119,16 +124,23 @@ export class Modal {
       // Сохраняем данные скриншота
       (placeholder as any).screenshotData = screenshotResult.dataUrl;
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Screenshot capture failed:', error);
       this.element.style.display = 'block';
+      
+      const errorMessage = error?.message || 'Unknown error';
+      const isTimeout = errorMessage.includes('timeout');
+      
       placeholder.innerHTML = `
         <div style="display: flex; flex-direction: column; align-items: center; padding: 20px; color: #ef4444;">
           <span style="font-size: 24px; margin-bottom: 8px;">❌</span>
-          <span>Screenshot failed</span>
+          <span>Screenshot ${isTimeout ? 'timeout' : 'failed'}</span>
           <span style="font-size: 12px; color: #6b7280; margin-top: 4px;">Click retake to try again</span>
         </div>
       `;
+      
+      // Очищаем данные скриншота при ошибке
+      (placeholder as any).screenshotData = null;
     } finally {
       if (retakeBtn) retakeBtn.disabled = false;
     }

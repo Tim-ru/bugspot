@@ -5,7 +5,21 @@ import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '../lib/supabase.js';
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+
+// JWT_SECRET is required for security - fail fast if not set
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET environment variable is required in production');
+  }
+  console.warn('⚠️  WARNING: JWT_SECRET not set. Using development fallback. This is INSECURE for production!');
+  // Only allow fallback in development
+  const fallbackSecret = 'DEV_ONLY_CHANGE_IN_PRODUCTION_' + Date.now();
+  console.warn('⚠️  Using temporary secret:', fallbackSecret.substring(0, 20) + '...');
+  var JWT_SECRET_SAFE = fallbackSecret;
+} else {
+  var JWT_SECRET_SAFE = JWT_SECRET;
+}
 
 // Register
 router.post('/register', async (req, res) => {
@@ -78,7 +92,7 @@ router.post('/register', async (req, res) => {
 
     // Generate JWT
     console.log('Generating JWT...');
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ userId: user.id }, JWT_SECRET_SAFE, { expiresIn: '7d' });
 
     console.log('Registration successful');
     res.status(201).json({
@@ -119,7 +133,7 @@ router.post('/login', async (req, res) => {
     }
 
     // Generate JWT
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ userId: user.id }, JWT_SECRET_SAFE, { expiresIn: '7d' });
 
     res.json({
       message: 'Login successful',
@@ -141,7 +155,7 @@ export function authenticateToken(req, res, next) {
     return res.status(401).json({ error: 'Access token required' });
   }
 
-  jwt.verify(token, JWT_SECRET, (err, user) => {
+  jwt.verify(token, JWT_SECRET_SAFE, (err, user) => {
     if (err) {
       return res.status(403).json({ error: 'Invalid token' });
     }
