@@ -1,6 +1,8 @@
 import express from 'express';
+import jwt from 'jsonwebtoken';
+import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '../lib/supabase.js';
-import { authenticateToken } from './auth.js';
+import { authenticateToken, getJwtSecret } from './auth.js';
 import { analyzeBugReport } from '../lib/aiClient.js';
 
 const router = express.Router();
@@ -32,8 +34,95 @@ async function verifyApiKey(req, res, next) {
   }
 }
 
-// Submit bug report (from widget)
-router.post('/submit', verifyApiKey, async (req, res) => {
+// Combined middleware: supports both API key (widget) and JWT token (dashboard)
+async function verifyApiKeyOrToken(req, res, next) {
+  const apiKey = req.headers['x-api-key'];
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  // Try API key first (for widget submissions)
+  if (apiKey) {
+    try {
+      const { data: project, error } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('api_key', apiKey)
+        .single();
+
+      if (error || !project) {
+        return res.status(401).json({ error: 'Invalid API key' });
+      }
+
+      req.project = project;
+      return next();
+    } catch (error) {
+      console.error('API key verification error:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  // Try JWT token (for dashboard submissions)
+  if (token) {
+    try {
+      // Use the same JWT secret as auth.js
+      const JWT_SECRET_SAFE = getJwtSecret();
+      
+      const decoded = jwt.verify(token, JWT_SECRET_SAFE);
+      const userId = decoded.userId;
+
+      // Get user's first project (or default project)
+      const { data: projects, error: projectsError } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('user_id', userId)
+        .limit(1);
+
+      if (projectsError) {
+        console.error('Error fetching projects:', projectsError);
+        return res.status(500).json({ error: 'Failed to fetch projects' });
+      }
+
+      // If no project exists, create a default one
+      if (!projects || projects.length === 0) {
+        console.log('No project found for user, creating default project...');
+        const projectApiKey = uuidv4();
+        
+        const { data: newProject, error: createError } = await supabase
+          .from('projects')
+          .insert({
+            user_id: userId,
+            name: 'Default Project',
+            api_key: projectApiKey
+          })
+          .select()
+          .single();
+
+        if (createError || !newProject) {
+          console.error('Error creating default project:', createError);
+          return res.status(500).json({ error: 'Failed to create default project' });
+        }
+
+        req.project = newProject;
+        return next();
+      }
+
+      req.project = projects[0];
+      return next();
+    } catch (error) {
+      if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+        return res.status(401).json({ error: 'Invalid or expired token' });
+      }
+      console.error('Token verification error:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  // Neither API key nor token provided
+  return res.status(401).json({ error: 'API key or authorization token required' });
+}
+
+// Submit bug report (from widget or dashboard)
+router.post('/submit', verifyApiKeyOrToken, async (req, res) => {
   try {
     const {
       title,

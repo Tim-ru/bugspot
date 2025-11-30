@@ -1,6 +1,7 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '../lib/supabase.js';
 
@@ -8,17 +9,23 @@ const router = express.Router();
 
 // JWT_SECRET is required for security - fail fast if not set
 const JWT_SECRET = process.env.JWT_SECRET;
+let JWT_SECRET_SAFE;
+
 if (!JWT_SECRET) {
   if (process.env.NODE_ENV === 'production') {
     throw new Error('JWT_SECRET environment variable is required in production');
   }
-  console.warn('⚠️  WARNING: JWT_SECRET not set. Using development fallback. This is INSECURE for production!');
-  // Only allow fallback in development
-  const fallbackSecret = 'DEV_ONLY_CHANGE_IN_PRODUCTION_' + Date.now();
-  console.warn('⚠️  Using temporary secret:', fallbackSecret.substring(0, 20) + '...');
-  var JWT_SECRET_SAFE = fallbackSecret;
+  // Generate a random secret for this server instance (dev only)
+  // Tokens will be invalidated on server restart - acceptable for development
+  JWT_SECRET_SAFE = crypto.randomBytes(32).toString('hex');
+  console.warn('⚠️  WARNING: JWT_SECRET not set. Using random dev secret (tokens expire on restart)');
 } else {
-  var JWT_SECRET_SAFE = JWT_SECRET;
+  JWT_SECRET_SAFE = JWT_SECRET;
+}
+
+// Export function to get JWT secret for use in other modules
+export function getJwtSecret() {
+  return JWT_SECRET_SAFE;
 }
 
 // Register

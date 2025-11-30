@@ -1,4 +1,5 @@
 import express from 'express';
+import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '../lib/supabase.js';
 import { authenticateToken } from './auth.js';
 
@@ -9,6 +10,11 @@ router.get('/dashboard', authenticateToken, async (req, res) => {
   try {
     const { projectId, days = 30 } = req.query;
 
+    // Validate user ID
+    if (!req.user || !req.user.userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
     // First, get user's project IDs
     let projectsQuery = supabase
       .from('projects')
@@ -17,7 +23,15 @@ router.get('/dashboard', authenticateToken, async (req, res) => {
 
     const { data: userProjects, error: projectsError } = await projectsQuery;
 
-    if (projectsError) throw projectsError;
+    if (projectsError) {
+      console.error('Error fetching user projects:', projectsError);
+      throw projectsError;
+    }
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log('User projects:', userProjects);
+      console.log('Requested projectId:', projectId);
+    }
 
     if (!userProjects || userProjects.length === 0) {
       return res.json({
@@ -29,12 +43,34 @@ router.get('/dashboard', authenticateToken, async (req, res) => {
       });
     }
 
+    // projectId is UUID string, not a number
     const projectIds = projectId 
-      ? userProjects.filter(p => p.id === projectId).map(p => p.id)
+      ? userProjects.filter(p => String(p.id) === String(projectId)).map(p => p.id)
       : userProjects.map(p => p.id);
 
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Filtered projectIds:', projectIds);
+    }
+
     if (projectId && projectIds.length === 0) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Project not found for user:', { projectId, userProjects });
+      }
       return res.status(404).json({ error: 'Project not found' });
+    }
+
+    // If no valid project IDs, return empty data
+    if (!projectIds || projectIds.length === 0) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('No project IDs found, returning empty data');
+      }
+      return res.json({
+        totalReports: 0,
+        reportsByStatus: {},
+        reportsBySeverity: {},
+        reportsOverTime: [],
+        recentReports: []
+      });
     }
 
     // Get total reports
@@ -45,7 +81,14 @@ router.get('/dashboard', authenticateToken, async (req, res) => {
 
     const { count: totalReports, error: totalError } = await totalQuery;
 
-    if (totalError) throw totalError;
+    if (totalError) {
+      console.error('Error getting total reports:', totalError);
+      throw totalError;
+    }
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Total reports count:', totalReports);
+    }
 
     // Get reports by status - use RPC if available, otherwise fallback to direct query
     let statusData = null;
@@ -206,8 +249,18 @@ router.get('/dashboard', authenticateToken, async (req, res) => {
       })) || []
     });
   } catch (error) {
-    console.error('Analytics error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('Analytics error:', error.message);
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        userId: req.user?.userId
+      });
+    }
+    res.status(500).json({ 
+      error: 'Internal server error',
+      message: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 
@@ -227,6 +280,51 @@ router.get('/projects', authenticateToken, async (req, res) => {
     res.json(projects);
   } catch (error) {
     console.error('Get projects error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Create project
+router.post('/projects', authenticateToken, async (req, res) => {
+  try {
+    const { name, domain } = req.body;
+
+    // Validate input
+    if (!name || typeof name !== 'string' || name.trim().length === 0) {
+      return res.status(400).json({ error: 'Project name is required' });
+    }
+
+    if (name.trim().length > 100) {
+      return res.status(400).json({ error: 'Project name must be less than 100 characters' });
+    }
+
+    // Generate unique API key for the project
+    const projectApiKey = uuidv4();
+
+    // Create project in Supabase
+    const { data: project, error } = await supabase
+      .from('projects')
+      .insert({
+        user_id: req.user.userId,
+        name: name.trim(),
+        domain: domain ? domain.trim() : null,
+        api_key: projectApiKey
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Create project error:', error);
+      // Check for unique constraint violation
+      if (error.code === '23505') {
+        return res.status(409).json({ error: 'Project with this name already exists' });
+      }
+      throw error;
+    }
+
+    res.status(201).json(project);
+  } catch (error) {
+    console.error('Create project error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

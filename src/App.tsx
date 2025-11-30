@@ -7,7 +7,6 @@ import ProfilePage from './pages/ProfilePage';
 import IntegrationPage from './pages/IntegrationPage';
 import { navigate, useHashPath } from './router';
 import BugReportWidget from './components/BugReportWidget';
-// mockApi imported in main.tsx to ensure earliest bootstrap
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);

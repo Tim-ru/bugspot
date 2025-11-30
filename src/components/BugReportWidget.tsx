@@ -35,6 +35,13 @@ export default function BugReportWidget({
     'top-left': 'top-4 left-4',
   };
 
+  const menuPositionClasses = {
+    'bottom-right': 'right-0',
+    'bottom-left': 'left-0',
+    'top-right': 'right-0',
+    'top-left': 'left-0',
+  };
+
   const borderRadiusClasses = {
     'rounded': 'rounded',
     'rounded-lg': 'rounded-lg',
@@ -72,7 +79,7 @@ export default function BugReportWidget({
           {isExpanded && (
             <div 
               className={`
-                absolute bottom-full mb-2 bg-white shadow-2xl border-2 p-2 min-w-48
+                absolute bottom-full mb-2 ${menuPositionClasses[widgetConfig.position]} bg-white shadow-2xl border-2 p-2 min-w-48
                 transform origin-bottom animate-in zoom-in-95 duration-200
                 ${borderRadiusClasses[widgetConfig.borderRadius]}
               `}

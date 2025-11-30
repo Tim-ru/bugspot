@@ -125,13 +125,19 @@ export default function BugReportModal({
         throw new Error('Not authenticated');
       }
 
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      };
+      
+      // Only add X-API-Key if apiKey is provided
+      if (config?.apiKey) {
+        headers['X-API-Key'] = config.apiKey;
+      }
+
       const response = await fetch('/api/bug-reports/submit', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'X-API-Key': config?.apiKey || ''
-        },
+        headers,
         body: JSON.stringify({
           title: report.title,
           description: report.description,

@@ -78,8 +78,25 @@ app.use('/api/bug-reports', bugReportRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/widget', widgetRoutes);
 
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Handle 404 for API routes (all HTTP methods)
+app.all('/api/*', (req, res) => {
+  res.status(404).json({ error: 'API endpoint not found' });
+});
+
 // Static files - after API routes
-app.use(express.static(distDir));
+// Exclude /api routes from static file serving
+app.use((req, res, next) => {
+  // Skip static file serving for API routes
+  if (req.path.startsWith('/api')) {
+    return next();
+  }
+  express.static(distDir)(req, res, next);
+});
 
 // Widget endpoint
 app.get('/widget.js', (req, res) => {
@@ -88,13 +105,13 @@ app.get('/widget.js', (req, res) => {
   res.sendFile(join(__dirname, '../widget/dist/widget.js'));
 });
 
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-// Serve React app for all other routes
-app.get('*', (req, res) => {
+// Serve React app for all other routes (but not API routes)
+app.get('*', (req, res, next) => {
+  // Skip API routes - they should be handled by API middleware above
+  if (req.path.startsWith('/api')) {
+    return next();
+  }
+  
   if (fs.existsSync(indexHtmlPath)) {
     return res.sendFile(indexHtmlPath);
   }
