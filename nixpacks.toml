@@ -1,0 +1,14 @@
+# Nixpacks configuration for Railway
+# This tells Railway to run our Express server, not just serve static files
+
+[phases.setup]
+nixPkgs = ["nodejs_18"]
+
+[phases.install]
+cmds = ["npm install"]
+
+[phases.build]
+cmds = ["npm run build", "npm run build:widget"]
+
+[start]
+cmd = "npm run start"
