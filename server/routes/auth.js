@@ -39,12 +39,15 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
+    // Normalize email for consistent storage and lookup
+    const normalizedEmail = email.toLowerCase().trim();
+
     console.log('Checking if user exists...');
     // Check if user exists
     const { data: existingUser, error: checkError } = await supabase
       .from('users')
       .select('id')
-      .eq('email', email)
+      .eq('email', normalizedEmail)
       .single();
 
     console.log('User check result:', { existingUser, checkError });
@@ -65,7 +68,7 @@ router.post('/register', async (req, res) => {
     const { data: user, error: userError } = await supabase
       .from('users')
       .insert({
-        email,
+        email: normalizedEmail,
         password_hash: passwordHash,
         api_key: apiKey
       })
@@ -122,11 +125,14 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
+    // Normalize email for consistent lookup
+    const normalizedEmail = email.toLowerCase().trim();
+
     // Find user
     const { data: user, error } = await supabase
       .from('users')
       .select('*')
-      .eq('email', email)
+      .eq('email', normalizedEmail)
       .single();
 
     if (error || !user) {
@@ -187,6 +193,167 @@ router.get('/profile', authenticateToken, async (req, res) => {
     res.json(user);
   } catch (error) {
     console.error('Profile error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Request password reset
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    // Normalize email for consistent lookup
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Find user by email
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id, email')
+      .eq('email', normalizedEmail)
+      .single();
+
+    // Always return success to prevent email enumeration
+    if (userError || !user) {
+      console.log('Password reset requested for non-existent email:', email);
+      return res.json({ 
+        message: 'If an account with that email exists, a password reset link has been sent.' 
+      });
+    }
+
+    // Generate reset token (random 32-byte hex string)
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    
+    // Hash the token for storage (we send unhashed to user, store hashed)
+    const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+    
+    // Set expiration to 1 hour from now
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+
+    // Invalidate any existing tokens for this user
+    await supabase
+      .from('password_reset_tokens')
+      .delete()
+      .eq('user_id', user.id);
+
+    // Store new reset token
+    const { error: tokenError } = await supabase
+      .from('password_reset_tokens')
+      .insert({
+        user_id: user.id,
+        token: hashedToken,
+        expires_at: expiresAt,
+        used: false
+      });
+
+    if (tokenError) {
+      console.error('Error storing reset token:', tokenError);
+      throw tokenError;
+    }
+
+    // In production, send email with reset link
+    // For MVP, we log the token (replace with email service later)
+    const resetUrl = `${process.env.APP_URL || 'http://localhost:5173'}/#/reset-password?token=${resetToken}`;
+    
+    console.log('='.repeat(60));
+    console.log('PASSWORD RESET REQUEST');
+    console.log('Email:', user.email);
+    console.log('Reset URL:', resetUrl);
+    console.log('Token expires:', expiresAt);
+    console.log('='.repeat(60));
+
+    // TODO: Integrate email service (Resend, SendGrid, etc.)
+    // await sendPasswordResetEmail(user.email, resetUrl);
+
+    res.json({ 
+      message: 'If an account with that email exists, a password reset link has been sent.',
+      // Only include in development for testing
+      ...(process.env.NODE_ENV !== 'production' && { 
+        _dev_reset_url: resetUrl,
+        _dev_note: 'This field is only shown in development mode' 
+      })
+    });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Reset password with token
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+      return res.status(400).json({ error: 'Token and new password are required' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
+    // Hash the provided token to compare with stored hash
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+    // Find valid token
+    const { data: resetToken, error: tokenError } = await supabase
+      .from('password_reset_tokens')
+      .select('id, user_id, expires_at, used')
+      .eq('token', hashedToken)
+      .single();
+
+    if (tokenError || !resetToken) {
+      return res.status(400).json({ error: 'Invalid or expired reset token' });
+    }
+
+    // Check if token is expired
+    if (new Date(resetToken.expires_at) < new Date()) {
+      return res.status(400).json({ error: 'Reset token has expired' });
+    }
+
+    // Check if token was already used
+    if (resetToken.used) {
+      return res.status(400).json({ error: 'Reset token has already been used' });
+    }
+
+    // Hash new password
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Update user password
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({ 
+        password_hash: passwordHash,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', resetToken.user_id);
+
+    if (updateError) {
+      console.error('Error updating password:', updateError);
+      throw updateError;
+    }
+
+    // Mark token as used
+    const { error: markUsedError } = await supabase
+      .from('password_reset_tokens')
+      .update({ used: true })
+      .eq('id', resetToken.id);
+
+    if (markUsedError) {
+      // Log error but don't fail the request - password was already changed
+      // This is a security concern, so we log it for monitoring
+      console.error('SECURITY WARNING: Failed to mark reset token as used:', markUsedError);
+      console.error('Token ID:', resetToken.id, 'User ID:', resetToken.user_id);
+    }
+
+    console.log('Password reset successful for user:', resetToken.user_id);
+
+    res.json({ message: 'Password has been reset successfully. You can now log in with your new password.' });
+  } catch (error) {
+    console.error('Reset password error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

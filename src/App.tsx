@@ -5,6 +5,7 @@ import Dashboard from './components/Dashboard';
 import BugsPage from './pages/BugsPage';
 import ProfilePage from './pages/ProfilePage';
 import IntegrationPage from './pages/IntegrationPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 import { navigate, useHashPath } from './router';
 import BugReportWidget from './components/BugReportWidget';
 
@@ -62,7 +63,22 @@ function App() {
     );
   }
 
+  // Check if we're on the reset password page
+  const hash = window.location.hash;
+  const isResetPasswordPage = hash.startsWith('#/reset-password');
+
   if (!isAuthenticated) {
+    // Show reset password page if that's the current route
+    if (isResetPasswordPage) {
+      return (
+        <ResetPasswordPage 
+          onSuccess={() => {
+            navigate('/');
+            window.location.reload();
+          }} 
+        />
+      );
+    }
     return <Auth onLogin={handleLogin} />;
   }
 

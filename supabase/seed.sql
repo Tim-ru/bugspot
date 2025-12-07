@@ -6,7 +6,7 @@ INSERT INTO users (id, email, password_hash, api_key, plan)
 VALUES (
   'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
   'test@bugspot.dev',
-  '$2a$10$rqLQbzQ7.MJgvqVv7vqz8eLw/kHKvqpzWPqX8LgJM3nP5qP5qP5qP', -- bcrypt hash of 'test123'
+  '$2a$10$m9IoXDTz9l.6r8QpQ4zAeu5pW5fqgDP7T0t/08wHDoU6oLoPijayS', -- bcrypt hash of 'test123'
   'bs_test_api_key_12345',
   'pro'
 ) ON CONFLICT (email) DO NOTHING;
